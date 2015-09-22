@@ -4,7 +4,7 @@ from csv import DictReader
 from argparse import ArgumentParser, FileType
 from sys import stdout
 
-class Colors:
+class Colours:
     LOW = '\033[1;31m'
     MED = '\033[1;33m'
     NAN = '\033[0;90m'
@@ -64,23 +64,45 @@ def formatESSList(essVals, colWidths, cWidth=None):
             charCount += 1
 
         if ess < 100.0:
-            col = Colors.LOW
+            col = Colours.LOW
         elif ess < 200.0:
-            col = Colors.MED
+            col = Colours.MED
         elif math.isnan(ess):
-            col = Colors.NAN
+            col = Colours.NAN
         else:
             col = ""
 
         thisString = "{0:0.1f}".format(ess).ljust(colWidth)[:colWidth]
         if cWidth != None and charCount + len(thisString) > cWidth:
             thisString = thisString[:(cWidth - charCount)]
-            essString += col + thisString + Colors.END
+            essString += col + thisString + Colours.END
             return essString
 
-        essString += col + thisString + Colors.END
+        essString += col + thisString + Colours.END
 
         charCount += len(thisString)
+
+    return essString
+
+def formatESSKompressed(essVals, cWidth=None):
+    if cWidth != None:
+        n = min(len(essVals), cWidth)
+    else:
+        n = len(essVals)
+
+    essString = ""
+    for i in range(n):
+        ess = essVals[i]
+
+        if ess < 100.0:
+            essString += Colours.LOW + "!" + Colours.END
+        elif ess < 200.0:
+            essString += Colours.MED + "*" + Colours.END
+        elif math.isnan(ess):
+            essString += Colours.NAN + "_" + Colours.END
+        else:
+            essString += "+"
+            col = ""
 
     return essString
 
@@ -97,13 +119,13 @@ if __name__ == '__main__':
             help="Percentage of each log to skip to account for burn-in.")
     parser.add_argument("-s", "--sample", dest="sampleHeader", type=str, default="Sample",
             help="Name of samples/iterations column (case sensitive).")
-
     parser.add_argument("-c", "--cut", action='store_true',
             help="Cut output to width of terminal window.")
-
     parser.add_argument("--columns", type=int,
             help="Number of columns to use when truncating output width. " +
                 "(Default is to determine console width using stty.)")
+    parser.add_argument("-k","--kompress", action='store_true',
+            help="Represent each ESS value with a single coloured character.")
 
     args = parser.parse_args()
 
@@ -126,13 +148,14 @@ if __name__ == '__main__':
             params = filter(lambda f: len(f)>0 and f != args.sampleHeader, rdr.fieldnames)
             colWidths = [max(10, len(p)) for p in params]
 
-            header = "LOG".ljust(fnamewidth) + " "
-            header += " ".join([params[i].ljust(colWidths[i])[:colWidths[i]] for i in range(len(params))])
+            if not args.kompress:
+                header = "LOG".ljust(fnamewidth) + " "
+                header += " ".join([params[i].ljust(colWidths[i])[:colWidths[i]] for i in range(len(params))])
 
-            if args.cut:
-                print header[:cWidth]
-            else:
-                print header
+                if args.cut:
+                    print header[:cWidth]
+                else:
+                    print header
 
         for param in params:
             data[param] = []
@@ -145,8 +168,14 @@ if __name__ == '__main__':
         for param in params:
                 essVals.append(getESS(data[param], args.burnin))
 
-        if args.cut:
-            print log.name.ljust(fnamewidth) + " " + formatESSList(essVals, colWidths, cWidth - fnamewidth - 1)
+        stdout.write(log.name.ljust(fnamewidth) + " ")
+        if not args.kompress:
+            if args.cut:
+                print formatESSList(essVals, colWidths, cWidth - fnamewidth - 1)
+            else:
+                print formatESSList(essVals, colWidths)
         else:
-            print log.name.ljust(fnamewidth) + " " + formatESSList(essVals, colWidths)
-
+            if args.cut:
+                print formatESSKompressed(essVals, cWidth)
+            else:
+                print formatESSKompressed(essVals)
