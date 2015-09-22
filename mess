@@ -19,7 +19,7 @@ def getESS(data, burninPerc):
     samples = len(data)
 
     assert len(data) > 1,"no stats for short sequences"
-  
+
     maxLag = min(samples//3, 1000)
 
     gammaStat = [0,]*maxLag
@@ -30,13 +30,13 @@ def getESS(data, burninPerc):
         data = numpy.array(data)
 
     normalizedData = data - data.mean()
-  
+
     for lag in range(maxLag) :
         v1 = normalizedData[:samples-lag]
         v2 = normalizedData[lag:]
         v = v1 * v2
         gammaStat[lag] = sum(v) / len(v)
-    
+
         if lag == 0 :
             varStat = gammaStat[0]
         elif lag % 2 == 0 :
@@ -45,12 +45,12 @@ def getESS(data, burninPerc):
                 varStat += 2.0*s
             else:
                 break
-      
 
     if varStat > 0:
         return samples * gammaStat[0] / varStat
     else:
         return float("nan")
+
 
 def formatESSList(essVals, colWidths, cWidth=None):
     essString = ""
@@ -102,7 +102,8 @@ if __name__ == '__main__':
             help="Cut output to width of terminal window.")
 
     parser.add_argument("--columns", type=int,
-            help="Cut output to width of terminal window.")
+            help="Number of columns to use when truncating output width. " +
+                "(Default is to determine console width using stty.)")
 
     args = parser.parse_args()
 
