@@ -126,6 +126,8 @@ if __name__ == '__main__':
                 "(Default is to determine console width using stty.)")
     parser.add_argument("-k","--kompress", action='store_true',
             help="Represent each ESS value with a single coloured character.")
+    parser.add_argument("-m","--min", action='store_true',
+            help="Only display minimum (non-NaN) ESS over all parameters for each log.")
 
     args = parser.parse_args()
 
@@ -148,7 +150,7 @@ if __name__ == '__main__':
             params = filter(lambda f: len(f)>0 and f != args.sampleHeader, rdr.fieldnames)
             colWidths = [max(10, len(p)) for p in params]
 
-            if not args.kompress:
+            if (not args.kompress) and (not args.min):
                 header = "LOG".ljust(fnamewidth) + " "
                 header += " ".join([params[i].ljust(colWidths[i])[:colWidths[i]] for i in range(len(params))])
 
@@ -169,13 +171,16 @@ if __name__ == '__main__':
                 essVals.append(getESS(data[param], args.burnin))
 
         stdout.write(log.name.ljust(fnamewidth) + " ")
-        if not args.kompress:
-            if args.cut:
-                print formatESSList(essVals, colWidths, cWidth - fnamewidth - 1)
-            else:
-                print formatESSList(essVals, colWidths)
-        else:
+        if args.min:
+            print "{0:0.1f}".format(min(filter(lambda x: not math.isnan(x), essVals)))
+        elif args.kompress:
             if args.cut:
                 print formatESSKompressed(essVals, cWidth)
             else:
                 print formatESSKompressed(essVals)
+        else:
+            if args.cut:
+                print formatESSList(essVals, colWidths, cWidth - fnamewidth - 1)
+            else:
+                print formatESSList(essVals, colWidths)
+
