@@ -1,0 +1,151 @@
+#!/usr/bin/env python
+import numpy, math, os
+from csv import DictReader
+from argparse import ArgumentParser, FileType
+from sys import stdout
+
+class Colors:
+    LOW = '\033[1;31m'
+    MED = '\033[1;33m'
+    NAN = '\033[0;90m'
+    END = '\033[0m'
+
+def getESS(data, burninPerc):
+    """Effective sample size, as computed by BEAST Tracer, stolen from biopy."""
+
+    burnin = int(math.floor(burninPerc*len(data)/100.0))
+    data = data[burnin:]
+
+    samples = len(data)
+
+    assert len(data) > 1,"no stats for short sequences"
+  
+    maxLag = min(samples//3, 1000)
+
+    gammaStat = [0,]*maxLag
+
+    varStat = 0.0
+
+    if type(data) != numpy.ndarray :
+        data = numpy.array(data)
+
+    normalizedData = data - data.mean()
+  
+    for lag in range(maxLag) :
+        v1 = normalizedData[:samples-lag]
+        v2 = normalizedData[lag:]
+        v = v1 * v2
+        gammaStat[lag] = sum(v) / len(v)
+    
+        if lag == 0 :
+            varStat = gammaStat[0]
+        elif lag % 2 == 0 :
+            s = gammaStat[lag-1] + gammaStat[lag]
+            if s > 0 :
+                varStat += 2.0*s
+            else:
+                break
+      
+
+    if varStat > 0:
+        return samples * gammaStat[0] / varStat
+    else:
+        return float("nan")
+
+def formatESSList(essVals, colWidths, cWidth=None):
+    essString = ""
+    charCount = 0
+    for i in range(len(essVals)):
+        ess = essVals[i]
+        colWidth = colWidths[i]
+
+        if i>0:
+            essString += " "
+            charCount += 1
+
+        if ess < 100.0:
+            col = Colors.LOW
+        elif ess < 200.0:
+            col = Colors.MED
+        elif math.isnan(ess):
+            col = Colors.NAN
+        else:
+            col = ""
+
+        thisString = "{0:0.1f}".format(ess).ljust(colWidth)[:colWidth]
+        if cWidth != None and charCount + len(thisString) > cWidth:
+            thisString = thisString[:(cWidth - charCount)]
+            essString += col + thisString + Colors.END
+            return essString
+
+        essString += col + thisString + Colors.END
+
+        charCount += len(thisString)
+
+    return essString
+
+### Main ###
+
+if __name__ == '__main__':
+
+    parser = ArgumentParser(description="Produce table of ESS values from one or more BEAST log files.")
+    parser.add_argument("logs", metavar='log', type=FileType('r'), nargs='+',
+            help="A BEAST parameter log file.")
+    parser.add_argument("-d", "--delimiter", dest="delim", type=str, default="\t",
+            help="Delimiter used to separate values of log file.")
+    parser.add_argument("-b", "--burnin", type=float, default=10.0,
+            help="Percentage of each log to skip to account for burn-in.")
+    parser.add_argument("-s", "--sample", dest="sampleHeader", type=str, default="Sample",
+            help="Name of samples/iterations column (case sensitive).")
+
+    parser.add_argument("-c", "--cut", action='store_true',
+            help="Cut output to width of terminal window.")
+
+    parser.add_argument("--columns", type=int,
+            help="Cut output to width of terminal window.")
+
+    args = parser.parse_args()
+
+    fnames = [fp.name for fp in args.logs]
+    fnamewidth = max([len(fname) for fname in fnames])
+
+    if args.cut:
+        if args.columns == None:
+            cHeight, cWidth = os.popen('stty size', 'r').read().split()
+            cWidth = int(cWidth)
+        else:
+            cWidth = args.columns
+
+    params = None
+    colWidths = None
+    for log in args.logs:
+        data = {}
+        rdr = DictReader(filter(lambda line: not line.strip().startswith("#"), log), delimiter=args.delim)
+        if params == None:
+            params = filter(lambda f: len(f)>0 and f != args.sampleHeader, rdr.fieldnames)
+            colWidths = [max(10, len(p)) for p in params]
+
+            header = "LOG".ljust(fnamewidth) + " "
+            header += " ".join([params[i].ljust(colWidths[i])[:colWidths[i]] for i in range(len(params))])
+
+            if args.cut:
+                print header[:cWidth]
+            else:
+                print header
+
+        for param in params:
+            data[param] = []
+
+        for row in rdr:
+            for param in params:
+                data[param].append(float(row[param]))
+
+        essVals = []
+        for param in params:
+                essVals.append(getESS(data[param], args.burnin))
+
+        if args.cut:
+            print log.name.ljust(fnamewidth) + " " + formatESSList(essVals, colWidths, cWidth - fnamewidth - 1)
+        else:
+            print log.name.ljust(fnamewidth) + " " + formatESSList(essVals, colWidths)
+
