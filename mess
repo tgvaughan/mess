@@ -10,11 +10,14 @@ class Colours:
     NAN = '\033[0;90m'
     END = '\033[0m'
 
-def getESS(data, burninPerc):
+def getESS(data, burninPerc, thin=None):
     """Effective sample size, as computed by BEAST Tracer, stolen from biopy."""
 
     burnin = int(math.floor(burninPerc*len(data)/100.0))
     data = data[burnin:]
+
+    if thin != None:
+        data = data[0:len(data):max(len(data)/thin,1)]
 
     samples = len(data)
 
@@ -51,7 +54,8 @@ def getESS(data, burninPerc):
     else:
         return float("nan")
 
-def colourizedString(string, ess):
+def colourizedString(string, ess, colours=False):
+    if colours:
         if ess < 100.0:
             col = Colours.LOW
         elif ess < 200.0:
@@ -63,7 +67,10 @@ def colourizedString(string, ess):
 
         return col + string + Colours.END
 
-def formatESSList(essVals, colWidths, cWidth=None):
+    else:
+        return string
+
+def formatESSList(essVals, colWidths, cWidth=None, colours=False):
     essString = ""
     charCount = 0
     for i in range(len(essVals)):
@@ -77,35 +84,32 @@ def formatESSList(essVals, colWidths, cWidth=None):
         thisString = "{0:0.1f}".format(ess).ljust(colWidth)[:colWidth]
         if cWidth != None and charCount + len(thisString) > cWidth:
             thisString = thisString[:(cWidth - charCount)]
-            essString += colourizedString(thisString, ess)
+            essString += colourizedString(thisString, ess, colours=colours)
             return essString
 
-        essString += colourizedString(thisString, ess)
-
+        essString += colourizedString(thisString, ess, colours=colours)
         charCount += len(thisString)
 
     return essString
 
-def getESSChar(ess):
-        if ess < 100.0:
-            return Colours.LOW + "!" + Colours.END
-        elif ess < 200.0:
-            return Colours.MED + "*" + Colours.END
-        elif math.isnan(ess):
-            return Colours.NAN + "_" + Colours.END
-        else:
-            return "+"
+def getESSChar(ess, colours=False):
+    if ess < 100.0:
+        return colourizedString("!", ess, colours=colours)
+    elif ess < 200.0:
+        return colourizedString("*", ess, colours=colours)
+    elif math.isnan(ess):
+        return colourizedString("_", ess, colours=colours)
 
-        return col + string + Colours.END
+    return colourizedString("+", ess, colours=colours)
 
-def formatESSKompressed(essVals):
+def formatESSKompressed(essVals, colours=False):
     essString = ""
     for i in range(len(essVals)):
         essString += getESSChar(essVals[i])
 
     minESS = min(filter(lambda x: not math.isnan(x), essVals))
 
-    essString += " " + colourizedString("{0:0.1f}".format(minESS), minESS)
+    essString += " " + colourizedString("{0:0.1f}".format(minESS), minESS, colours=colours)
 
     return essString
 
@@ -113,7 +117,9 @@ def formatESSKompressed(essVals):
 
 if __name__ == '__main__':
 
-    parser = ArgumentParser(description="Produce table of ESS values from one or more BEAST log files.")
+    parser = ArgumentParser(description="Produce table of ESS values from one or more BEAST log files.",
+            epilog="""ESS values smaller than 100 are considered very low and are highlited in red.
+            Values between 100 and 200 are also fairly low and are highlighted in yellow.""")
     parser.add_argument("logs", metavar='log', type=FileType('r'), nargs='+',
             help="A BEAST parameter log file.")
     parser.add_argument("-d", "--delimiter", dest="delim", type=str, default="\t",
@@ -124,25 +130,28 @@ if __name__ == '__main__':
             help="Name of samples/iterations column (case sensitive).")
     parser.add_argument("-c", "--cut", action='store_true',
             help="Cut unkompressed output to width of terminal window.")
-    parser.add_argument("--columns", type=int,
-            help="Number of columns to use when truncating unkompressed output width. " +
-                "(Default is to determine console width using stty.)")
+    parser.add_argument("-n", "--no-colours", action='store_true',
+            help="Disable colour output.")
     parser.add_argument("-k","--kompress", action='store_true',
             help="Represent each ESS value with a single coloured character.")
     parser.add_argument("-m","--min", action='store_true',
             help="Only display minimum (non-NaN) ESS over all parameters for each log.")
+    parser.add_argument("-t","--thin", type=int,
+            help="Thin the data to at most this many evenly-spaced samples before computing ESS.")
 
     args = parser.parse_args()
 
     fnames = [fp.name for fp in args.logs]
     fnamewidth = max([len(fname) for fname in fnames])
 
+    # Disable cutting and colours if stdout isn't a terminal
+    if not stdout.isatty():
+        args.cut = False
+        args.no_colours = True
+
     if args.cut:
-        if args.columns == None:
-            cHeight, cWidth = os.popen('stty size', 'r').read().split()
-            cWidth = int(cWidth)
-        else:
-            cWidth = args.columns
+        cHeight, cWidth = os.popen('stty size', 'r').read().split()
+        cWidth = int(cWidth)
 
     params = None
     colWidths = None
@@ -173,18 +182,18 @@ if __name__ == '__main__':
 
         essVals = []
         for param in params:
-                essVals.append(getESS(data[param], args.burnin))
+                essVals.append(getESS(data[param], args.burnin, thin=args.thin))
 
         stdout.write(log.name.ljust(fnamewidth) + " ")
         if args.min:
             print "{0:0.1f}".format(min(filter(lambda x: not math.Yisnan(x), essVals)))
         elif args.kompress:
-            print formatESSKompressed(essVals)
+            print formatESSKompressed(essVals, colours=not args.no_colours)
         else:
             if args.cut:
-                print formatESSList(essVals, colWidths, cWidth - fnamewidth - 1)
+                print formatESSList(essVals, colWidths, cWidth - fnamewidth - 1, colours=not args.no_colours)
             else:
-                print formatESSList(essVals, colWidths)
+                print formatESSList(essVals, colWidths, colours=not args.no_colours)
 
         stdout.flush()
 
