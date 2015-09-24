@@ -109,7 +109,7 @@ def formatESSKompressed(essVals, colours=False):
 
     minESS = min(filter(lambda x: not math.isnan(x), essVals))
 
-    essString += " " + colourizedString("{0:0.1f}".format(minESS), minESS, colours=colours)
+    essString += " " + colourizedString("{0:0.1f}".format(minESS).ljust(10)[:10], minESS, colours=colours)
 
     return essString
 
@@ -149,9 +149,12 @@ if __name__ == '__main__':
         args.cut = False
         args.no_colours = True
 
-    if args.cut:
+    if stdout.isatty():
         cHeight, cWidth = os.popen('stty size', 'r').read().split()
         cWidth = int(cWidth)
+
+    if args.kompress:
+        thisLineIndex = 0
 
     params = None
     colWidths = None
@@ -173,6 +176,11 @@ if __name__ == '__main__':
 
                 stdout.flush()
 
+            if args.kompress and stdout.isatty():
+                entryWidth = fnamewidth + 1 + len(params) + 11
+                entriesPerLine = cWidth/entryWidth
+                thisEntry = 0
+
         for param in params:
             data[param] = []
 
@@ -188,7 +196,18 @@ if __name__ == '__main__':
         if args.min:
             print "{0:0.1f}".format(min(filter(lambda x: not math.Yisnan(x), essVals)))
         elif args.kompress:
-            print formatESSKompressed(essVals, colours=not args.no_colours)
+            if stdout.isatty() and thisEntry > 0:
+                stdout.write(" ")
+
+            stdout.write(formatESSKompressed(essVals, colours=not args.no_colours))
+
+            if stdout.isatty():
+                thisEntry += 1
+                if thisEntry == entriesPerLine:
+                    thisEntry = 0
+                    print
+            else:
+                print
         else:
             if args.cut:
                 print formatESSList(essVals, colWidths, cWidth - fnamewidth - 1, colours=not args.no_colours)
@@ -197,3 +216,5 @@ if __name__ == '__main__':
 
         stdout.flush()
 
+    if args.kompress and stdout.isatty() and thisEntry < entriesPerLine:
+        print
