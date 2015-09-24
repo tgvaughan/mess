@@ -51,6 +51,17 @@ def getESS(data, burninPerc):
     else:
         return float("nan")
 
+def colourizedString(string, ess):
+        if ess < 100.0:
+            col = Colours.LOW
+        elif ess < 200.0:
+            col = Colours.MED
+        elif math.isnan(ess):
+            col = Colours.NAN
+        else:
+            col = ""
+
+        return col + string + Colours.END
 
 def formatESSList(essVals, colWidths, cWidth=None):
     essString = ""
@@ -63,46 +74,38 @@ def formatESSList(essVals, colWidths, cWidth=None):
             essString += " "
             charCount += 1
 
-        if ess < 100.0:
-            col = Colours.LOW
-        elif ess < 200.0:
-            col = Colours.MED
-        elif math.isnan(ess):
-            col = Colours.NAN
-        else:
-            col = ""
-
         thisString = "{0:0.1f}".format(ess).ljust(colWidth)[:colWidth]
         if cWidth != None and charCount + len(thisString) > cWidth:
             thisString = thisString[:(cWidth - charCount)]
-            essString += col + thisString + Colours.END
+            essString += colourizedString(thisString, ess)
             return essString
 
-        essString += col + thisString + Colours.END
+        essString += colourizedString(thisString, ess)
 
         charCount += len(thisString)
 
     return essString
 
-def formatESSKompressed(essVals, cWidth=None):
-    if cWidth != None:
-        n = min(len(essVals), cWidth)
-    else:
-        n = len(essVals)
-
-    essString = ""
-    for i in range(n):
-        ess = essVals[i]
-
+def getESSChar(ess):
         if ess < 100.0:
-            essString += Colours.LOW + "!" + Colours.END
+            return Colours.LOW + "!" + Colours.END
         elif ess < 200.0:
-            essString += Colours.MED + "*" + Colours.END
+            return Colours.MED + "*" + Colours.END
         elif math.isnan(ess):
-            essString += Colours.NAN + "_" + Colours.END
+            return Colours.NAN + "_" + Colours.END
         else:
-            essString += "+"
-            col = ""
+            return "+"
+
+        return col + string + Colours.END
+
+def formatESSKompressed(essVals):
+    essString = ""
+    for i in range(len(essVals)):
+        essString += getESSChar(essVals[i])
+
+    minESS = min(filter(lambda x: not math.isnan(x), essVals))
+
+    essString += " " + colourizedString("{0:0.1f}".format(minESS), minESS)
 
     return essString
 
@@ -120,9 +123,9 @@ if __name__ == '__main__':
     parser.add_argument("-s", "--sample", dest="sampleHeader", type=str, default="Sample",
             help="Name of samples/iterations column (case sensitive).")
     parser.add_argument("-c", "--cut", action='store_true',
-            help="Cut output to width of terminal window.")
+            help="Cut unkompressed output to width of terminal window.")
     parser.add_argument("--columns", type=int,
-            help="Number of columns to use when truncating output width. " +
+            help="Number of columns to use when truncating unkompressed output width. " +
                 "(Default is to determine console width using stty.)")
     parser.add_argument("-k","--kompress", action='store_true',
             help="Represent each ESS value with a single coloured character.")
@@ -159,6 +162,8 @@ if __name__ == '__main__':
                 else:
                     print header
 
+                stdout.flush()
+
         for param in params:
             data[param] = []
 
@@ -172,15 +177,14 @@ if __name__ == '__main__':
 
         stdout.write(log.name.ljust(fnamewidth) + " ")
         if args.min:
-            print "{0:0.1f}".format(min(filter(lambda x: not math.isnan(x), essVals)))
+            print "{0:0.1f}".format(min(filter(lambda x: not math.Yisnan(x), essVals)))
         elif args.kompress:
-            if args.cut:
-                print formatESSKompressed(essVals, cWidth)
-            else:
-                print formatESSKompressed(essVals)
+            print formatESSKompressed(essVals)
         else:
             if args.cut:
                 print formatESSList(essVals, colWidths, cWidth - fnamewidth - 1)
             else:
                 print formatESSList(essVals, colWidths)
+
+        stdout.flush()
 
