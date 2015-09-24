@@ -105,7 +105,7 @@ def getESSChar(ess, colours=False):
 def formatESSKompressed(essVals, colours=False):
     essString = ""
     for i in range(len(essVals)):
-        essString += getESSChar(essVals[i])
+        essString += getESSChar(essVals[i], colours=colours)
 
     minESS = min(filter(lambda x: not math.isnan(x), essVals))
 
