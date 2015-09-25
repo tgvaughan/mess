@@ -2,7 +2,7 @@
 import numpy, math, os
 from csv import DictReader
 from argparse import ArgumentParser, FileType
-from sys import stdout
+from sys import stdout, exit
 
 class Colours:
     LOW = '\033[1;31m'
@@ -115,7 +115,7 @@ def formatESSKompressed(essVals, colours=False):
 
 ### Main ###
 
-if __name__ == '__main__':
+def main():
 
     parser = ArgumentParser(description="Produce table of ESS values from one or more BEAST log files.",
             epilog="""ESS values smaller than 100 are considered very low and are highlited in red.
@@ -218,3 +218,15 @@ if __name__ == '__main__':
 
     if args.kompress and stdout.isatty() and thisEntry < entriesPerLine:
         print
+
+# Call main from here, catching KeyboardInterrupt to
+# avoid unsightly stack traces.
+
+if __name__ == '__main__':
+
+    try:
+        main()
+    except KeyboardInterrupt:
+        exit(1)
+
+    exit(0)
