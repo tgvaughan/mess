@@ -1,11 +1,11 @@
 mess
 ====
 
-Small program for estimating effective sample size (ESS) for every parameter
-contained in each of many [BEAST 2](http://www.beast2.org/) log files sharing
-the same set of parameters. Mess has a few advantages over the LogAnalyser
-utility distributed with BEAST when assessing the health of a large number of
-similar analyses:
+Small command line utility for estimating effective sample size (ESS) for every
+parameter contained in each of many [BEAST 2](http://www.beast2.org/) log files
+sharing the same set of parameters. Mess has a few advantages over the
+LogAnalyser utility distributed with BEAST when assessing the health of a large
+number of similar analyses:
 
 1. Only ESS values are computed and displayed, other irrelevant stats are ignored.
 
@@ -26,3 +26,5 @@ In compact mode the parameters are not named and the actual ESS values aren't
 listed, but ascii art is used to depict the health of each log.  The lowest ESS
 in each log which is given on the right of the art.
 ![img](https://github.com/tgvaughan/mess/wiki/images/mess2.png)
+
+See `mess -h` for usage instructions.
