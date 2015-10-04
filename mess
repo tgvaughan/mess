@@ -122,11 +122,11 @@ def main():
             Values between 100 and 200 are also fairly low and are highlighted in yellow.""")
     parser.add_argument("logs", metavar='log', type=FileType('r'), nargs='+',
             help="A BEAST parameter log file.")
-    parser.add_argument("-d", "--delimiter", dest="delim", type=str, default="\t",
+    parser.add_argument("-d", "--delimiter", dest="delim", type=str, metavar="string", default="\t",
             help="Delimiter used to separate values of log file.")
-    parser.add_argument("-b", "--burnin", type=float, default=10.0,
+    parser.add_argument("-b", "--burnin", type=float, metavar="percentage", default=10.0,
             help="Percentage of each log to skip to account for burn-in.")
-    parser.add_argument("-s", "--sample", dest="sampleHeader", type=str, default="Sample",
+    parser.add_argument("-s", "--sample", dest="sampleHeader", type=str, metavar="string", default="Sample",
             help="Name of samples/iterations column (case sensitive).")
     parser.add_argument("-c", "--cut", action='store_true',
             help="Cut unkompressed output to width of terminal window.")
@@ -136,8 +136,10 @@ def main():
             help="Represent each ESS value with a single coloured character.")
     parser.add_argument("-m","--min", action='store_true',
             help="Only display minimum (non-NaN) ESS over all parameters for each log.")
-    parser.add_argument("-t","--thin", type=int,
+    parser.add_argument("-t","--thin", type=int, metavar="int",
             help="Thin the data to at most this many evenly-spaced samples before computing ESS.")
+    parser.add_argument("-o","--omit", type=str, metavar="string",
+            help="Omit fields with headers containing given string. Case insensitive.")
 
     args = parser.parse_args()
 
@@ -162,7 +164,9 @@ def main():
         data = {}
         rdr = DictReader(filter(lambda line: not line.strip().startswith("#"), log), delimiter=args.delim)
         if params == None:
-            params = filter(lambda f: len(f)>0 and f != args.sampleHeader, rdr.fieldnames)
+            params = filter(lambda f: len(f)>0
+                    and f != args.sampleHeader
+                    and (args.omit == None or args.omit.lower() not in f.lower()), rdr.fieldnames)
             colWidths = [max(10, len(p)) for p in params]
 
             if (not args.kompress) and (not args.min):
@@ -194,7 +198,7 @@ def main():
 
         stdout.write(log.name.ljust(fnamewidth) + " ")
         if args.min:
-            print "{0:0.1f}".format(min(filter(lambda x: not math.Yisnan(x), essVals)))
+            print "{0:0.1f}".format(min(filter(lambda x: not math.isnan(x), essVals)))
         elif args.kompress:
             if stdout.isatty() and thisEntry > 0:
                 stdout.write(" ")
