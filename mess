@@ -130,6 +130,8 @@ def main():
             help="Name of samples/iterations column (case sensitive).")
     parser.add_argument("-c", "--cut", action='store_true',
             help="Cut unkompressed output to width of terminal window.")
+    parser.add_argument("-w", "--width", type=int, metavar="ncols",
+            help="Width to be used for terminal width.  Helpful when output is not a tty.")
     parser.add_argument("-n", "--no-colours", action='store_true',
             help="Disable colour output.")
     parser.add_argument("-k","--kompress", action='store_true',
@@ -151,9 +153,14 @@ def main():
         args.cut = False
         args.no_colours = True
 
-    if stdout.isatty():
-        cHeight, cWidth = os.popen('stty size', 'r').read().split()
-        cWidth = int(cWidth)
+    if args.width == None:
+        if stdout.isatty():
+            cHeight, cWidth = os.popen('stty size', 'r').read().split()
+            cWidth = int(cWidth)
+        else:
+            cWidth = None
+    else:
+        cWidth = args.width
 
     if args.kompress:
         thisLineIndex = 0
@@ -180,7 +187,7 @@ def main():
 
                 stdout.flush()
 
-            if args.kompress and stdout.isatty():
+            if args.kompress and (stdout.isatty() or cWidth != None):
                 entryWidth = fnamewidth + 1 + len(params) + 11
                 entriesPerLine = cWidth/entryWidth
                 thisEntry = 0
@@ -198,20 +205,21 @@ def main():
 
         stdout.write(log.name.ljust(fnamewidth) + " ")
         if args.min:
-            print "{0:0.1f}".format(min(filter(lambda x: not math.isnan(x), essVals)))
+            minParam, minESS = min(filter(lambda x: not math.isnan(x[1]), zip(params, essVals)), key=lambda x: x[1])
+            print "{0:0.1f} ({1:s})".format(minESS, minParam)
         elif args.kompress:
-            if stdout.isatty() and thisEntry > 0:
+            if (stdout.isatty() or cWidth != None) and thisEntry > 0:
                 stdout.write(" ")
 
             stdout.write(formatESSKompressed(essVals, colours=not args.no_colours))
 
-            if stdout.isatty():
+            if stdout.isatty() or cWidth != None:
                 thisEntry += 1
                 if thisEntry == entriesPerLine:
                     thisEntry = 0
-                    print
+                    stdout.write("\n")
             else:
-                print
+                stdout.write("\n")
         else:
             if args.cut:
                 print formatESSList(essVals, colWidths, cWidth - fnamewidth - 1, colours=not args.no_colours)
