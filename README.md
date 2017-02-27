@@ -20,11 +20,13 @@ number of similar analyses:
 
 For example, here is the output in the default mode. The name of each parameter
 and the ESS value for that parameter in each log is listed explicitly:
+
 ![img](https://github.com/tgvaughan/mess/wiki/images/mess1.png)
 
 In compact mode the parameters are not named and the actual ESS values aren't
 listed, but ascii art is used to depict the health of each log.  The lowest ESS
 in each log is given on the right of the art.
+
 ![img](https://github.com/tgvaughan/mess/wiki/images/mess2.png)
 
 See `mess -h` for usage instructions.
