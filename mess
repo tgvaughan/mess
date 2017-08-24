@@ -123,7 +123,7 @@ def main():
     parser = ArgumentParser(description="Produce table of ESS values from one or more BEAST log files.",
             epilog="""ESS values smaller than 100 are considered very low and are highlited in red.
             Values between 100 and 200 are also fairly low and are highlighted in yellow.""")
-    parser.add_argument("logs", metavar='log', type=FileType('r'), nargs='+',
+    parser.add_argument("logFileNames", metavar='log', type=str, nargs='+',
             help="A BEAST parameter log file.")
     parser.add_argument("-d", "--delimiter", dest="delim", type=str, metavar="string", default="\t",
             help="Delimiter used to separate values of log file. (Default is tab-delimited.)")
@@ -148,7 +148,7 @@ def main():
 
     args = parser.parse_args()
 
-    fnames = [fp.name for fp in args.logs]
+    fnames = args.logFileNames
     fnamewidth = max([len(fname) for fname in fnames])
 
     # Disable cutting and colours if stdout isn't a terminal
@@ -170,69 +170,70 @@ def main():
 
     params = None
     colWidths = None
-    for log in args.logs:
-        data = {}
-        rdr = DictReader(filter(lambda line: not line.strip().startswith("#"), log), delimiter=args.delim)
-        if params == None:
-            params = filter(lambda f: len(f)>0
-                    and f != args.sampleHeader
-                    and (args.omit == None or args.omit.lower() not in f.lower()), rdr.fieldnames)
-            colWidths = [max(10, len(p)) for p in params]
+    for logFileName in args.logFileNames:
+        with open(logFileName,"r") as log:
+            data = {}
+            rdr = DictReader(filter(lambda line: not line.strip().startswith("#"), log), delimiter=args.delim)
+            if params == None:
+                params = filter(lambda f: len(f)>0
+                        and f != args.sampleHeader
+                        and (args.omit == None or args.omit.lower() not in f.lower()), rdr.fieldnames)
+                colWidths = [max(10, len(p)) for p in params]
 
-            if (not args.kompress) and (not args.min):
-                header = "LOG".ljust(fnamewidth) + " "
-                header += " ".join([params[i].ljust(colWidths[i])[:colWidths[i]] for i in range(len(params))])
+                if (not args.kompress) and (not args.min):
+                    header = "LOG".ljust(fnamewidth) + " "
+                    header += " ".join([params[i].ljust(colWidths[i])[:colWidths[i]] for i in range(len(params))])
 
-                if args.cut:
-                    print header[:cWidth]
-                else:
-                    print header
+                    if args.cut:
+                        print header[:cWidth]
+                    else:
+                        print header
 
-                stdout.flush()
+                    stdout.flush()
 
-            if args.kompress and (stdout.isatty() or cWidth != None):
-                entryWidth = fnamewidth + 1 + len(params) + 11
-                entriesPerLine = cWidth/entryWidth
-                thisEntry = 0
-
-        for param in params:
-            data[param] = []
-
-        for row in rdr:
-            try:
-                for param in params:
-                    data[param].append(float(row[param]))
-            except KeyError as e:
-                raise ParameterReadException(e.message, log.name)
-
-        essVals = []
-        for param in params:
-                essVals.append(getESS(data[param], args.burnin, thin=args.thin))
-
-        stdout.write(log.name.ljust(fnamewidth) + " ")
-        if args.min:
-            minParam, minESS = min(filter(lambda x: not math.isnan(x[1]), zip(params, essVals)), key=lambda x: x[1])
-            print "{0:0.1f} ({1:s})".format(minESS, minParam)
-        elif args.kompress:
-            if (stdout.isatty() or cWidth != None) and thisEntry > 0:
-                stdout.write(" ")
-
-            stdout.write(formatESSKompressed(essVals, colours=not args.no_colours))
-
-            if stdout.isatty() or cWidth != None:
-                thisEntry += 1
-                if thisEntry == entriesPerLine:
+                if args.kompress and (stdout.isatty() or cWidth != None):
+                    entryWidth = fnamewidth + 1 + len(params) + 11
+                    entriesPerLine = cWidth/entryWidth
                     thisEntry = 0
+
+            for param in params:
+                data[param] = []
+
+            for row in rdr:
+                try:
+                    for param in params:
+                        data[param].append(float(row[param]))
+                except KeyError as e:
+                    raise ParameterReadException(e.message, log.name)
+
+            essVals = []
+            for param in params:
+                    essVals.append(getESS(data[param], args.burnin, thin=args.thin))
+
+            stdout.write(log.name.ljust(fnamewidth) + " ")
+            if args.min:
+                minParam, minESS = min(filter(lambda x: not math.isnan(x[1]), zip(params, essVals)), key=lambda x: x[1])
+                print "{0:0.1f} ({1:s})".format(minESS, minParam)
+            elif args.kompress:
+                if (stdout.isatty() or cWidth != None) and thisEntry > 0:
+                    stdout.write(" ")
+
+                stdout.write(formatESSKompressed(essVals, colours=not args.no_colours))
+
+                if stdout.isatty() or cWidth != None:
+                    thisEntry += 1
+                    if thisEntry == entriesPerLine:
+                        thisEntry = 0
+                        stdout.write("\n")
+                else:
                     stdout.write("\n")
             else:
-                stdout.write("\n")
-        else:
-            if args.cut:
-                print formatESSList(essVals, colWidths, cWidth - fnamewidth - 1, colours=not args.no_colours)
-            else:
-                print formatESSList(essVals, colWidths, colours=not args.no_colours)
+                if args.cut:
+                    print formatESSList(essVals, colWidths, cWidth - fnamewidth - 1, colours=not args.no_colours)
+                else:
+                    print formatESSList(essVals, colWidths, colours=not args.no_colours)
 
-        stdout.flush()
+            stdout.flush()
 
     if args.kompress and stdout.isatty() and thisEntry < entriesPerLine:
         print
