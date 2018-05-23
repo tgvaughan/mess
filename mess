@@ -15,7 +15,7 @@ class ParameterReadException(Exception):
         self.pname = pname
         self.fname = fname
 
-def getESS(data, burninPerc, thin=None):
+def calculateESS(data, burninPerc, thin=None):
     """Effective sample size, as computed by BEAST Tracer, stolen from biopy."""
 
     burnin = int(math.floor(burninPerc*len(data)/100.0))
@@ -58,6 +58,8 @@ def getESS(data, burninPerc, thin=None):
         return float("nan")
 
 def colourizedString(string, ess, colours=False):
+    """Colour-codes a string according to the given ess value."""
+
     if colours:
         if ess < 100.0:
             col = Colours.LOW
@@ -74,6 +76,8 @@ def colourizedString(string, ess, colours=False):
         return string
 
 def formatESSList(essVals, colWidths, cWidth=None, colours=False):
+    """Construct a string representing a record in the ESS table."""
+
     essString = ""
     charCount = 0
     for i in range(len(essVals)):
@@ -96,6 +100,8 @@ def formatESSList(essVals, colWidths, cWidth=None, colours=False):
     return essString
 
 def getESSChar(ess, colours=False):
+    """Retrieve a (coloured) single-character representation of an ESS value."""
+    
     if ess < 100.0:
         return colourizedString("!", ess, colours=colours)
     elif ess < 200.0:
@@ -105,7 +111,9 @@ def getESSChar(ess, colours=False):
 
     return colourizedString("+", ess, colours=colours)
 
-def formatESSKompressed(essVals, colours=False):
+def formatESSListKompressed(essVals, colours=False):
+    """Construct a short string representing a record in the ESS table."""
+    
     essString = ""
     for i in range(len(essVals)):
         essString += getESSChar(essVals[i], colours=colours)
@@ -116,10 +124,67 @@ def formatESSKompressed(essVals, colours=False):
 
     return essString
 
-### Main ###
+def formatMinESS(minESS, minParam, colours=False):
+    """Construct a string representing the minimum ESS value in a log file."""
 
-def main():
+    return colourizedString("{0:0.1f} ({1:s})".format(minESS, minParam),
+                            minESS, colours=colours)
 
+def processFieldNames(fieldnames, fnamewidth, cWidth, args):
+    """Extract names of parameters from field names and print header if required."""
+
+    params = filter(lambda f: len(f)>0
+                    and f != args.sampleHeader
+                    and (args.omit == None or args.omit.lower() not in f.lower()),
+                    fieldnames)
+
+    colWidths = [max(10, len(p)) for p in params]
+
+    if (not args.kompress) and (not args.min):
+        header = "LOG".ljust(fnamewidth) + " "
+        header += " ".join([params[i].ljust(colWidths[i])[:colWidths[i]] for i in range(len(params))])
+
+        if args.cut:
+            print header[:cWidth]
+        else:
+            print header
+
+        stdout.flush()
+    
+
+    if args.kompress and (stdout.isatty() or cWidth != None):
+        entryWidth = fnamewidth + 1 + len(params) + 11
+        entriesPerLine = cWidth/entryWidth
+    else:
+        entriesPerLine = None
+
+    return params, colWidths, entriesPerLine
+
+
+def getLogFileESSVals(rdr, params, args):
+    """Retrieve ESS values for params from log file CSV reader rdr."""
+
+    data = {}
+    
+    for param in params:
+        data[param] = []
+
+    for row in rdr:
+        try:
+            for param in params:
+                data[param].append(float(row[param]))
+        except KeyError as e:
+            raise ParameterReadException(e.message, log.name)
+
+    essVals = []
+    for param in params:
+        essVals.append(calculateESS(data[param], args.burnin, thin=args.thin))
+
+    return essVals
+
+def processCommandLine():
+    """Retrieve and process command line arguments."""
+    
     parser = ArgumentParser(description="Produce table of ESS values from one or more BEAST log files.",
             epilog="""ESS values smaller than 100 are considered very low and are highlited in red.
             Values between 100 and 200 are also fairly low and are highlighted in yellow.""")
@@ -146,7 +211,14 @@ def main():
     parser.add_argument("-o","--omit", type=str, metavar="string",
             help="Omit fields with headers containing given string. Case insensitive.")
 
-    args = parser.parse_args()
+    return parser.parse_args()
+    
+
+### Main ###
+
+def main():
+
+    args = processCommandLine();
 
     fnames = args.logFileNames
     fnamewidth = max([len(fname) for fname in fnames])
@@ -170,55 +242,35 @@ def main():
 
     params = None
     colWidths = None
+    thisEntry = 0
     for logFileName in args.logFileNames:
         with open(logFileName,"r") as log:
-            data = {}
             rdr = DictReader(filter(lambda line: not line.strip().startswith("#"), log), delimiter=args.delim)
             if params == None:
-                params = filter(lambda f: len(f)>0
-                        and f != args.sampleHeader
-                        and (args.omit == None or args.omit.lower() not in f.lower()), rdr.fieldnames)
-                colWidths = [max(10, len(p)) for p in params]
+                params, colWidths, entriesPerLine = processFieldNames(rdr.fieldnames,
+                                                                      fnamewidth, cWidth,
+                                                                      args)
 
-                if (not args.kompress) and (not args.min):
-                    header = "LOG".ljust(fnamewidth) + " "
-                    header += " ".join([params[i].ljust(colWidths[i])[:colWidths[i]] for i in range(len(params))])
-
-                    if args.cut:
-                        print header[:cWidth]
-                    else:
-                        print header
-
-                    stdout.flush()
-
-                if args.kompress and (stdout.isatty() or cWidth != None):
-                    entryWidth = fnamewidth + 1 + len(params) + 11
-                    entriesPerLine = cWidth/entryWidth
-                    thisEntry = 0
-
-            for param in params:
-                data[param] = []
-
-            for row in rdr:
-                try:
-                    for param in params:
-                        data[param].append(float(row[param]))
-                except KeyError as e:
-                    raise ParameterReadException(e.message, log.name)
-
-            essVals = []
-            for param in params:
-                    essVals.append(getESS(data[param], args.burnin, thin=args.thin))
+            essVals = getLogFileESSVals(rdr, params, args)
 
             stdout.write(log.name.ljust(fnamewidth) + " ")
+
             if args.min:
-                minParam, minESS = min(filter(lambda x: not math.isnan(x[1]), zip(params, essVals)), key=lambda x: x[1])
-                print "{0:0.1f} ({1:s})".format(minESS, minParam)
+                # Print minimum ESS value
+
+                minParam, minESS = min(filter(lambda x: not math.isnan(x[1]),
+                                              zip(params, essVals)), key=lambda x: x[1])
+
+                stdout.write(formatMinESS(minESS, minParam, colours=not args.no_colours))
+                stdout.write("\n")
+
             elif args.kompress:
+                # Print "kompressed" representation of all ESS values
+                
                 if (stdout.isatty() or cWidth != None) and thisEntry > 0:
                     stdout.write(" ")
 
-                stdout.write(formatESSKompressed(essVals, colours=not args.no_colours))
+                stdout.write(formatESSListKompressed(essVals, colours=not args.no_colours))
 
                 if stdout.isatty() or cWidth != None:
                     thisEntry += 1
@@ -227,7 +279,10 @@ def main():
                         stdout.write("\n")
                 else:
                     stdout.write("\n")
+
             else:
+                # Print full representation of all ESS values
+                
                 if args.cut:
                     print formatESSList(essVals, colWidths, cWidth - fnamewidth - 1, colours=not args.no_colours)
                 else:
