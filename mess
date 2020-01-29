@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2
 import math, os
 from csv import DictReader
 from argparse import ArgumentParser, FileType
@@ -11,9 +11,8 @@ class Colours:
     END = '\033[0m'
 
 class ParameterReadException(Exception):
-    def __init__(self, pname, fname):
+    def __init__(self, pname):
         self.pname = pname
-        self.fname = fname
 
 def calculateESS(data, burninPerc, thin=None):
     """Effective sample size, as computed by BEAST Tracer, stolen from biopy."""
@@ -174,7 +173,7 @@ def getLogFileESSVals(rdr, params, args):
             for param in params:
                 data[param].append(float(row[param]))
         except KeyError as e:
-            raise ParameterReadException(e.message, log.name)
+            raise ParameterReadException(e.message)
 
     essVals = []
     for param in params:
@@ -245,6 +244,8 @@ def main():
     thisEntry = 0
     for logFileName in args.logFileNames:
         with open(logFileName,"r") as log:
+            stdout.write(log.name.ljust(fnamewidth) + " ")
+
             rdr = DictReader(filter(lambda line: not line.strip().startswith("#"), log), delimiter=args.delim)
             if params == None:
                 params, colWidths, entriesPerLine = processFieldNames(rdr.fieldnames,
@@ -252,8 +253,6 @@ def main():
                                                                       args)
 
             essVals = getLogFileESSVals(rdr, params, args)
-
-            stdout.write(log.name.ljust(fnamewidth) + " ")
 
             if args.min:
                 # Print minimum ESS value
@@ -304,5 +303,5 @@ if __name__ == '__main__':
         exit(1)
     except ParameterReadException as e:
         stderr.write("\nCould not find parameter " + e.pname +
-                " in log file " + e.fname + ". Aborting.\n")
+                " in log file.  Aborting.\n")
 
